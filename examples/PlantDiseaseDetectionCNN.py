@@ -1,6 +1,6 @@
 import os
 
-from keras import models,layers
+from keras import models, layers
 from keras.applications import VGG16
 from keras.optimizers import SGD
 from keras.preprocessing.image import ImageDataGenerator
@@ -9,9 +9,9 @@ from optimizer.KerasOptimizer import KerasOptimizer
 from optimizer.Strategy import Strategy
 
 
-
 def custom_model():
-    vgg = VGG16(weights='imagenet', classes=3, include_top=False, input_shape=(224, 224, 3))
+    num_of_classes = 2
+    vgg = VGG16(weights='imagenet', classes=num_of_classes, include_top=False, input_shape=(224, 224, 3))
 
     # Create the model
     model = models.Sequential()
@@ -22,19 +22,22 @@ def custom_model():
     model.add(layers.Flatten())
     model.add(layers.Dense(1024, activation='relu'))
     model.add(layers.Dropout(0.5))
-    model.add(layers.Dense(3, activation='softmax'))
+    model.add(layers.Dense(num_of_classes, activation='softmax'))
 
-    #model.summary()
+    # model.summary()
 
     return model
 
-def train_model( hyperparams):
-    train_data = "C:/Users/bkmksta/Desktop/PlantDiseaseDetection/datasetsingle/Train"
-    validation_data = "C:/Users/bkmksta/Desktop/PlantDiseaseDetection/datasetsingle/Validation"
+
+def train_model(hyperparams):
+    train_data = "C:/Users/asgksta/PlantDiseaseDetection/data/datasetsingle/Train"
+    validation_data = "C:/Users/asgksta/PlantDiseaseDetection/data/datasetsingle/Validation"
 
     batch_size = hyperparams["batch_size"]
     EPOCHS = hyperparams["epochs"]
     INIT_LR = hyperparams["learning_rate"]
+    decay_rate = hyperparams["decay"]
+    momentum = hyperparams["momentum"]
     width = 224
     height = 224
 
@@ -71,7 +74,7 @@ def train_model( hyperparams):
     # initialize the model
     print("[INFO] compiling model...")
     model = custom_model()
-    opt = SGD(lr=INIT_LR, decay=1e-6, momentum=0.9, nesterov=True)
+    opt = SGD(lr=INIT_LR, decay=decay_rate, momentum=momentum, nesterov=True)
     model.compile(loss="categorical_crossentropy", optimizer=opt, metrics=["accuracy"])
 
     history = model.fit_generator(
@@ -82,20 +85,21 @@ def train_model( hyperparams):
         validation_data=validation_generator,
         validation_steps=nb_validation_samples // batch_size)
 
-    return history.history['accuracy']
+    return history.history['val_accuracy']
 
 
 def run():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    dataset = current_dir + '/../dataset/mnist.npz'
-    optimizer = KerasOptimizer(dataset)
+    optimizer = KerasOptimizer(max_iteration=100, initial_population=20, mutation_probability=0.01, crossover_prob=0.7)
 
     optimizer.select_optimizer_strategy(Strategy.MAXIMIZE)
-    optimizer.add_hyperparameter('batch_size', [16, 32, 64])
-    optimizer.add_hyperparameter('epochs', [1, 2, 3])
+    optimizer.add_hyperparameter('batch_size', [16, 32, 64,128])
+    optimizer.add_hyperparameter('epochs', [1, 5, 10,20])
     optimizer.add_hyperparameter('learning_rate', [0.001, 0.01, 0.1])
-    optimizer.show_graph_on_end()
+    optimizer.add_hyperparameter('decay', [1e-6, 1e-7])
+    optimizer.add_hyperparameter('momentum', [0.9, 0.0])
+    optimizer.show_graph_on_end(show=False)
     optimizer.run(custom_model, train_model)
+
 
 if __name__ == '__main__':
     run()

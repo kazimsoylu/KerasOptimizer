@@ -23,6 +23,8 @@ class KerasOptimizer:
     input_shape = None
     weights = None
     include_top = False
+    crossover_prob = 0.7
+    mutation_probability = 0.01
 
     toolbox = None
     hyperparam_list = []
@@ -32,11 +34,10 @@ class KerasOptimizer:
     model = None
 
     show_graph = False
-    train_function=None
-
+    train_function = None
 
     def __init__(self, dataset=None, max_iteration=100, initial_population=20, layer_size=2, classes=2,
-                 input_shape=(224, 224, 3), weights=None):
+                 input_shape=(224, 224, 3), weights=None, crossover_prob=0.7, mutation_probability=0.01):
         self.initial_population = initial_population
         self.dataset = dataset
         self.layer_size = layer_size
@@ -45,12 +46,21 @@ class KerasOptimizer:
         self.input_shape = input_shape
         self.weights = weights
         self.toolbox = base.Toolbox()
+        self.crossover_prob = crossover_prob
+        self.mutation_probability = mutation_probability
 
     def select_optimizer_strategy(self, strategy):
+
+        if "FitnessFunc" in globals():
+            del globals()["FitnessFunc"]
+
         if strategy == Strategy.MAXIMIZE:
             creator.create("FitnessFunc", base.Fitness, weights=(1.0,))
         else:
             creator.create("FitnessFunc", base.Fitness, weights=(-1.0,))
+
+        if "Individual" in globals():
+            del globals()["Individual"]
 
         creator.create("Individual", list, fitness=creator.FitnessFunc)
 
@@ -61,13 +71,12 @@ class KerasOptimizer:
         self.hyperparam_index_dict[len(self.hyperparam_list) - 1] = self.hyperparam_list[len(self.hyperparam_list) - 1]
         return self
 
-    def show_graph_on_end(self):
-        self.show_graph = True
+    def show_graph_on_end(self,show=True):
+        self.show_graph = show
 
     def run(self, model_function, train_function):
-        N_CYCLES = 1
         self.toolbox.register("individual", tools.initCycle, creator.Individual, self.hyperparam_list,
-                              n=N_CYCLES)
+                              n=1)
 
         # define the population to be a list of individuals
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
@@ -79,9 +88,7 @@ class KerasOptimizer:
         self.model = model_function()
         self.train_function = train_function
 
-        population_size = 20
-        crossover_probability = 0.7
-        mutation_probability = 0.01
+        population_size = self.initial_population
         number_of_generations = 4
 
         pop = self.toolbox.population(n=population_size)
@@ -91,9 +98,9 @@ class KerasOptimizer:
         stats.register("std", np.std)
         stats.register("min", np.min)
         stats.register("max", np.max)
-        algorithms.eaSimple(pop, self.toolbox, cxpb=crossover_probability, stats=stats,
-                            mutpb=mutation_probability, ngen=number_of_generations, halloffame=hof,
-                            verbose=True)
+        pop, log = algorithms.eaSimple(pop, self.toolbox, cxpb=self.crossover_prob, stats=stats,
+                                       mutpb=self.mutation_probability, ngen=number_of_generations, halloffame=hof,
+                                       verbose=True)
 
         best_parameters = hof[0]  # save the optimal set of parameters
         print('Best parameters:', best_parameters)
@@ -133,56 +140,15 @@ class KerasOptimizer:
         decay = 1e-6
 
         score = self.train_function({
-            "batch_size" : batch_size,
-            "epochs" : epochs,
-            "learning_rate" : learning_rate,
-            "decay" : decay
+            "batch_size": batch_size,
+            "epochs": epochs,
+            "learning_rate": learning_rate,
+            "decay": decay,
+            "momentum" : individual[self.hyperparam_dict['momentum']]
         })
         print('Score:', score, 'Individual:', individual)
         print('END--------------------------------------')
         return score
-
-
-        """
-        num_classes = 10
-        # input image dimensions
-        img_rows, img_cols = 28, 28
-
-        # the data, split between train and test sets
-        dataset_path = self.dataset
-        (x_train, y_train), (x_test, y_test) = mnist.load_data(dataset_path)
-
-        if K.image_data_format() == 'channels_first':
-            x_train = x_train.reshape(x_train.shape[0], 1, img_rows, img_cols)
-            x_test = x_test.reshape(x_test.shape[0], 1, img_rows, img_cols)
-            input_shape = (1, img_rows, img_cols)
-        else:
-            x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
-            x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
-            input_shape = (img_rows, img_cols, 1)
-
-        x_train = x_train.astype('float32')
-        x_test = x_test.astype('float32')
-        x_train /= 255
-        x_test /= 255
-        print('x_train shape:', x_train.shape)
-        print(x_train.shape[0], 'train samples')
-        print(x_test.shape[0], 'test samples')
-
-        # convert class vectors to binary class matrices
-        y_train = keras.utils.to_categorical(y_train, num_classes)
-        y_test = keras.utils.to_categorical(y_test, num_classes)
-
-        self.model.fit(x_train, y_train,
-                       batch_size=batch_size,
-                       epochs=epochs,
-                       verbose=0,
-                       validation_data=(x_test, y_test))
-
-        score = self.model.evaluate(x_test, y_test, verbose=0)
-        
-        print('Score:', score, 'Individual:', individual)
-        """
         print('END--------------------------------------')
 
     def mutate(self, individual):

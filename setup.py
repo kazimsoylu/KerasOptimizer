@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="keras-optimizer",
-    version="0.0.1",
+    version="0.0.3",
     author="Kazim SOYLU",
     author_email="kazimsoylu@gmail.com",
     description="Evolutionary Keras Hyperparameter Optimizer",
